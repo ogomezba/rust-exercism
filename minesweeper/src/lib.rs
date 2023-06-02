@@ -44,7 +44,54 @@ impl Matrix {
         Matrix { elements }
     }
 
-    fn get(&self, i: &usize, j: &usize) -> &BoardSquare {
-        self.elements.get(i).and_then(|row| row.get(j)).unwrap()
+    fn get(&self, i: usize, j: usize) -> &BoardSquare {
+        self.elements.get(&i).and_then(|row| row.get(&j)).unwrap()
+    }
+
+    fn rows(&self) -> usize {
+        self.elements.len()
+    }
+
+    fn cols(&self) -> usize {
+        self.elements.get(&0).map(|row| row.len()).unwrap()
+    }
+
+    fn iter(&self) -> MatrixIter {
+        MatrixIter {
+            matrix: self,
+            i: 0,
+            j: 0,
+        }
+    }
+}
+
+struct MatrixIter<'a> {
+    matrix: &'a Matrix,
+    i: usize,
+    j: usize,
+}
+
+struct AdjacentElements<'a> {
+    matrix: &'a Matrix,
+}
+
+impl<'a> Iterator for MatrixIter<'a> {
+    type Item = &'a BoardSquare;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i == self.matrix.rows() {
+            return None;
+        }
+
+        let current_element = self.matrix.get(self.i, self.j);
+
+        self.j += 1;
+
+        if self.j == self.matrix.cols() {
+            self.j = 0;
+            self.i += 1;
+        }
+
+        return Some(current_element);
     }
 }
