@@ -1,99 +1,127 @@
-use std::collections::HashMap;
+use std::{char::from_digit, collections::HashMap, fmt::Debug};
 
 pub fn annotate(minefield: &[&str]) -> Vec<String> {
-    if minefield.is_empty() {
-        return Vec::new();
-    }
+    let board_without_numbers = build_matrix(minefield);
+    let mut final_minefield = Vec::with_capacity(board_without_numbers.size.0);
 
-    let board = Matrix::new(minefield);
-    let mut annotated_board = Vec::with_capacity(minefield.len());
+    for col_iter in board_without_numbers.row_iter() {
+        let mut row = String::with_capacity(board_without_numbers.size.1);
 
-    board.rows_iter().enumerate().for_each(|(i, row)| {
-        let mut row_str = String::new();
+        for bs in col_iter {
+            row.push(match bs.square_type {
+                BoardType::Bomb => '*',
+                BoardType::NoBomb => {
+                    let adjacent_bombs = board_without_numbers
+                        .adjacents((bs.i, bs.j))
+                        .filter(|bs| bs.square_type == BoardType::Bomb)
+                        .count();
 
-        row.enumerate().for_each(|(j, bs)| {
-            println!("i: {i}, j: {j}");
-            row_str.push(match bs {
-                BoardSquare::Bomb => '*',
-                BoardSquare::NoBomb => {
-                    match char::from_digit(
-                        board
-                            .adjacents((i, j))
-                            .filter(|bs| **bs == BoardSquare::Bomb)
-                            .count() as u32,
-                        10,
-                    )
-                    .unwrap()
-                    {
-                        '0' => ' ',
-                        n => n,
+                    match adjacent_bombs {
+                        0 => ' ',
+                        n => from_digit(n as u32, 10).unwrap(),
                     }
                 }
             });
-        });
+        }
 
-        annotated_board.push(row_str);
-    });
+        final_minefield.push(row);
+    }
 
-    return annotated_board;
+    return final_minefield;
 }
 
-#[derive(Debug)]
-struct Matrix {
-    elements: HashMap<usize, HashMap<usize, BoardSquare>>,
+fn build_matrix(rows: &[&str]) -> Matrix<BoardSquare> {
+    if rows.len() == 0 {
+        return Matrix::new((0, 0));
+    }
+
+    let mut board = Matrix::new((rows.len(), rows.get(0).unwrap().len()));
+
+    for (i, row) in rows.iter().enumerate() {
+        for (j, c) in row.chars().enumerate() {
+            board.put(
+                (i, j),
+                BoardSquare {
+                    i,
+                    j,
+                    square_type: BoardType::from_char(c),
+                },
+            );
+        }
+    }
+
+    return board;
 }
 
-#[derive(Debug, PartialEq)]
-enum BoardSquare {
+struct Matrix<T> {
+    size: (usize, usize),
+    elements: HashMap<usize, HashMap<usize, T>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum BoardType {
     Bomb,
     NoBomb,
 }
 
-impl BoardSquare {
-    fn from_string(c: char) -> BoardSquare {
+impl BoardType {
+    fn from_char(c: char) -> Self {
         match c {
-            '*' => BoardSquare::Bomb,
-            _ => BoardSquare::NoBomb,
+            '*' => BoardType::Bomb,
+            _ => BoardType::NoBomb,
         }
     }
 }
 
-impl Matrix {
-    fn new(rows: &[&str]) -> Matrix {
-        let mut elements: HashMap<usize, HashMap<usize, BoardSquare>> = HashMap::new();
+#[derive(Debug, Clone)]
+struct BoardSquare {
+    i: usize,
+    j: usize,
+    square_type: BoardType,
+}
 
-        rows.iter().enumerate().for_each(|(row_idx, row)| {
-            let mut board_row = HashMap::new();
-            row.chars()
-                .map(BoardSquare::from_string)
-                .enumerate()
-                .for_each(|(col_idx, bs)| {
-                    board_row.insert(col_idx, bs);
-                });
+impl<T> Matrix<T> {
+    fn new((i, j): (usize, usize)) -> Matrix<T> {
+        if i == 0 {
+            return Matrix {
+                elements: HashMap::new(),
+                size: (0, 0),
+            };
+        }
 
-            elements.insert(row_idx, board_row);
-        });
+        let mut elements = HashMap::with_capacity(i);
 
-        Matrix { elements }
+        for idx in 0..i {
+            elements.insert(idx, HashMap::with_capacity(j));
+        }
+
+        Matrix {
+            elements,
+            size: (i, j),
+        }
     }
 
-    fn get(&self, (i, j): (usize, usize)) -> &BoardSquare {
+    fn get(&self, (i, j): (usize, usize)) -> &T {
         self.elements.get(&i).and_then(|row| row.get(&j)).unwrap()
     }
 
     fn rows(&self) -> usize {
-        self.elements.len()
+        self.size.0
     }
 
     fn cols(&self) -> usize {
-        self.elements.get(&0).map(|row| row.len()).unwrap()
+        self.size.1
     }
 
-    fn rows_iter(&self) -> RowIter {
+    fn row_iter(&self) -> RowIter<T> {
         RowIter { matrix: self, i: 0 }
     }
 
-    fn adjacents(&self, element: (usize, usize)) -> AdjacentElementsIter {
+    fn put(&mut self, (i, j): (usize, usize), element: T) {
+        self.elements.get_mut(&i).unwrap().insert(j, element);
+    }
+
+    fn adjacents(&self, element: (usize, usize)) -> AdjacentElementsIter<T> {
         AdjacentElementsIter {
             matrix: self,
             element,
@@ -102,25 +130,57 @@ impl Matrix {
     }
 }
 
-struct RowIter<'a> {
-    matrix: &'a Matrix,
+struct RowIter<'a, T> {
+    matrix: &'a Matrix<T>,
     i: usize,
 }
 
-struct ColumnIter<'a> {
-    matrix: &'a Matrix,
+struct ColumnIter<'a, T> {
+    matrix: &'a Matrix<T>,
     i: usize,
     j: usize,
 }
 
-struct AdjacentElementsIter<'a> {
-    matrix: &'a Matrix,
+struct AdjacentElementsIter<'a, T> {
+    matrix: &'a Matrix<T>,
     element: (usize, usize),
     current_adjacent: Direction,
 }
 
-impl<'a> Iterator for AdjacentElementsIter<'a> {
-    type Item = &'a BoardSquare;
+impl<'a, T> Iterator for RowIter<'a, T> {
+    type Item = ColumnIter<'a, T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.i {
+            i if i == self.matrix.rows() => None,
+            i => {
+                self.i += 1;
+                Some(ColumnIter {
+                    matrix: self.matrix,
+                    j: 0,
+                    i,
+                })
+            }
+        }
+    }
+}
+
+impl<'a, T> Iterator for ColumnIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.j {
+            j if j == self.matrix.cols() => None,
+            j => {
+                self.j += 1;
+                Some(self.matrix.get((self.i, j)))
+            }
+        }
+    }
+}
+
+impl<'a, T> Iterator for AdjacentElementsIter<'a, T> {
+    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.current_adjacent {
@@ -200,38 +260,6 @@ impl<'a> Iterator for AdjacentElementsIter<'a> {
             }
 
             Direction::END => return None,
-        }
-    }
-}
-
-impl<'a> Iterator for RowIter<'a> {
-    type Item = ColumnIter<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.i {
-            i if i == self.matrix.rows() => None,
-            i => {
-                self.i += 1;
-                Some(ColumnIter {
-                    matrix: self.matrix,
-                    j: 0,
-                    i,
-                })
-            }
-        }
-    }
-}
-
-impl<'a> Iterator for ColumnIter<'a> {
-    type Item = &'a BoardSquare;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.j {
-            j if j == self.matrix.cols() => None,
-            j => {
-                self.j += 1;
-                Some(self.matrix.get((self.i, j)))
-            }
         }
     }
 }
