@@ -2,30 +2,28 @@ use std::{char::from_digit, collections::HashMap, fmt::Debug};
 
 pub fn annotate(minefield: &[&str]) -> Vec<String> {
     let board_without_numbers = build_matrix(minefield);
-    let mut final_minefield = Vec::with_capacity(board_without_numbers.size.0);
 
-    for col_iter in board_without_numbers.row_iter() {
-        let mut row = String::with_capacity(board_without_numbers.size.1);
+    let final_minefield = board_without_numbers
+        .row_iter()
+        .map(|col_iter| {
+            col_iter
+                .map(|bs| match bs.square_type {
+                    BoardType::Bomb => '*',
+                    BoardType::NoBomb => {
+                        let adjacent_bombs = board_without_numbers
+                            .adjacents((bs.i, bs.j))
+                            .filter(|bs| bs.square_type == BoardType::Bomb)
+                            .count();
 
-        for bs in col_iter {
-            row.push(match bs.square_type {
-                BoardType::Bomb => '*',
-                BoardType::NoBomb => {
-                    let adjacent_bombs = board_without_numbers
-                        .adjacents((bs.i, bs.j))
-                        .filter(|bs| bs.square_type == BoardType::Bomb)
-                        .count();
-
-                    match adjacent_bombs {
-                        0 => ' ',
-                        n => from_digit(n as u32, 10).unwrap(),
+                        match adjacent_bombs {
+                            0 => ' ',
+                            n => from_digit(n as u32, 10).unwrap(),
+                        }
                     }
-                }
-            });
-        }
-
-        final_minefield.push(row);
-    }
+                })
+                .collect()
+        })
+        .collect();
 
     return final_minefield;
 }
